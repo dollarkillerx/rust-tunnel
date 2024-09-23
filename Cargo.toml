@@ -5,3 +5,12 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.40.0", features = ["full"] }
+anyhow = "1.0.89"
+tonic = "0.12.2"
+prost = "0.13.3" # 用于生成 Protobuf
+
+
+[build-dependencies]
+tonic-build = "0.12.1" # 用于编译 Protobuf
+#[dev-dependencies]
+#tonic-build = "0.12.2"  # 用于编译 Protobuf

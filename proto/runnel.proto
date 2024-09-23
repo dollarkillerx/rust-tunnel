@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package runnel;
+
+service Tunnel {
+    rpc TunnelMessage (stream TunnelRequest) returns (stream TunnelResponse);
+}
+
+message TunnelRequest {
+    string target = 1;
+    bytes message = 2;
+    bool over = 3;
+}
+
+message TunnelResponse {
+    bytes data = 1;
+}
