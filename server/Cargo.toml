@@ -10,5 +10,3 @@ tonic = "0.12.2"
 prost = "0.13.3" # 用于生成 Protobuf
 proto = { path = "../proto" }
 tokio-stream = "0.1.16"
-futures-core = "0.3.30"
-async-stream = "0.3.5"  # 引用共享的 proto 库

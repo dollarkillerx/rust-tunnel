@@ -21,13 +21,13 @@ impl Tunnel for CoreTunnelServer {
         let mut req_stream = request.into_inner();
         let (tx, rx) = mpsc::channel(1000);
 
-        async_stream::try_stream! {
+        tokio::spawn(async move {
               while let Some(result) = req_stream.next().await {
                 let result = result.unwrap();
-                println!("Message recieved: {:?}", result.message);
-                tx.send(Ok( { TunnelResponse{data: vec![]} })).await.unwrap();
+                println!("Message recieved: {:?}", String::from_utf8(result.message));
+                tx.send(Ok( { TunnelResponse{data: String::from("Hello, world!").into_bytes()} })).await.unwrap();
             }
-        };
+        });
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }
@@ -35,7 +35,7 @@ impl Tunnel for CoreTunnelServer {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let addr = "[::1]:50051".parse().unwrap();
+    let addr = "0.0.0.0:50051".parse().unwrap();
     let core_server = CoreTunnelServer::default();
 
     println!("Rust Tunnel listening on {}", addr);
