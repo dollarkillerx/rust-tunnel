@@ -1,8 +1,15 @@
 use tokio::net::TcpStream;
 use anyhow::{Result, anyhow};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::Request;
+use tonic::transport::Channel;
+use proto::runnel::tunnel_client::TunnelClient;
+use proto::runnel::TunnelRequest;
 
-pub(crate) async fn handle_socks5_server(mut client: TcpStream) -> Result<()> {
+pub(crate) async fn handle_socks5_server(mut client: TcpStream, mut client_sender: TunnelClient<Channel>) -> Result<()> {
     // 1. Handshake phase
     let mut buf = [0u8; 2];
     client.read_exact(&mut buf).await?;
@@ -70,28 +77,53 @@ pub(crate) async fn handle_socks5_server(mut client: TcpStream) -> Result<()> {
 
     // Attempt to establish connection to the target
     let target = format!("{}:{}", dest_addr, port);
-    match TcpStream::connect(target).await {
-        Ok(mut target_stream) => {
-            // Get local address information for replying to the client
-            let local_addr = target_stream.local_addr()?;
-            send_reply(&mut client, 0x00, &local_addr.ip().to_string(), local_addr.port()).await?;
 
-            // 3. Data forwarding
-            let (mut ri, mut wi) = client.split();
-            let (mut ro, mut wo) = target_stream.split();
+    proxy(client, client_sender, target).await
+    // match TcpStream::connect(target).await {
+    //     Ok(mut target_stream) => {
+    //         // Get local address information for replying to the client
+    //         let local_addr = target_stream.local_addr()?;
+    //         send_reply(&mut client, 0x00, &local_addr.ip().to_string(), local_addr.port()).await?;
+    //
+    //         // 3. Data forwarding
+    //         let (mut ri, mut wi) = client.split();
+    //         let (mut ro, mut wo) = target_stream.split();
+    //
+    //         // Bidirectional forwarding
+    //         let client_to_target = tokio::io::copy(&mut ri, &mut wo);
+    //         let target_to_client = tokio::io::copy(&mut ro, &mut wi);
+    //
+    //         tokio::try_join!(client_to_target, target_to_client)?;
+    //     }
+    //     Err(_) => {
+    //         // Connection failed
+    //         send_reply(&mut client, 0x05, "0.0.0.0", 0).await?;
+    //         return Err(anyhow!("Failed to connect to target"));
+    //     }
+    // }
+}
 
-            // Bidirectional forwarding
-            let client_to_target = tokio::io::copy(&mut ri, &mut wo);
-            let target_to_client = tokio::io::copy(&mut ro, &mut wi);
+async fn proxy(mut client: TcpStream, mut client_sender: TunnelClient<Channel>, target: String) -> Result<()> {
+    let (tx, rx) = mpsc::channel(10000);
+    let ack = ReceiverStream::new(rx);
+    let response = client_sender.tunnel_message(Request::new(ack)).await?;
+    // 初始化message
+    tx.send(TunnelRequest {
+        message: vec![],
+        over: false,
+        target: target.into(),
+    }).await?;
 
-            tokio::try_join!(client_to_target, target_to_client)?;
+    let mut stream = response.into_inner();
+        while let Some(result) = stream.next().await {
+            let result = result.unwrap();
+
+            tx.send(TunnelRequest {
+                message: message.into_bytes(),
+                over: false,
+                target: "127.0.0.1".into(),
+            }).await.unwrap();
         }
-        Err(_) => {
-            // Connection failed
-            send_reply(&mut client, 0x05, "0.0.0.0", 0).await?;
-            return Err(anyhow!("Failed to connect to target"));
-        }
-    }
 
     Ok(())
 }
